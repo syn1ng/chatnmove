@@ -103,14 +103,15 @@ def websocket(ws):
                         except:
                             pass
             elif data['type'] == 'chat':
-                # send message in chat
+                # send message in chat with styles
                 for other_id, other_ws in clients.items():
                     try:
                         other_ws.send(json.dumps({
                             'type': 'chat',
                             'id': client_id,
                             'name': names[client_id],
-                            'message': data['message']
+                            'message': data['message'],
+                            'style': data.get('style', {})  # Include style if provided
                         }))
                     except:
                         pass

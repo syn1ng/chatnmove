@@ -96,6 +96,22 @@
         <label for="nameInput">Chat Name:</label>
         <input type="text" id="nameInput" placeholder="Enter your name">
         <button id="updateNameButton">Update Name</button>
+        <br>
+        <label for="fontInput">Font URL:</label>
+        <input type="text" id="fontInput" placeholder="Enter font file URL">
+        <button id="updateFontButton">Update Font</button>
+        <br>
+        <label for="colorInput">Text Color:</label>
+        <input type="color" id="colorInput">
+        <label for="highlightInput">Highlight Color:</label>
+        <input type="color" id="highlightInput">
+        <br>
+        <label>
+            <input type="checkbox" id="boldCheckbox"> Bold
+        </label>
+        <label>
+            <input type="checkbox" id="italicCheckbox"> Italic
+        </label>
     </div>
 
     <div id="chat">
@@ -146,6 +162,12 @@
         const updateSpriteButton = document.getElementById('updateSpriteButton');
         const nameInput = document.getElementById('nameInput');
         const updateNameButton = document.getElementById('updateNameButton');
+        const fontInput = document.getElementById('fontInput');
+        const updateFontButton = document.getElementById('updateFontButton');
+        const colorInput = document.getElementById('colorInput');
+        const highlightInput = document.getElementById('highlightInput');
+        const boldCheckbox = document.getElementById('boldCheckbox');
+        const italicCheckbox = document.getElementById('italicCheckbox');
         let x = 100;
         let y = 100;
         const speed = 5;
@@ -164,7 +186,7 @@
             } else if (data.type === 'move') {
                 updateSprite(data.id, data.x, data.y);
             } else if (data.type === 'chat') {
-                displayMessage(`${data.name}: ${data.message}`);
+                displayMessage(`${data.name}: ${data.message}`, data.style);
             } else if (data.type === 'update_sprite') {
                 updateSpriteAppearance(data.id, data.sprite);
             } else if (data.type === 'update_name') {
@@ -240,17 +262,43 @@
         function sendMessage() {
             const message = chatInput.value.trim();
             if (message) {
+                const color = colorInput.value;
+                const highlight = highlightInput.value;
+                const bold = boldCheckbox.checked;
+                const italic = italicCheckbox.checked;
+
                 socket.send(JSON.stringify({
                     type: 'chat',
-                    message: message
+                    message: message,
+                    style: {
+                        color: color,
+                        highlight: highlight,
+                        bold: bold,
+                        italic: italic
+                    }
                 }));
                 chatInput.value = '';
             }
         }
 
-        function displayMessage(message) {
+        function displayMessage(message, style = {}) {
             const messageDiv = document.createElement('div');
             messageDiv.textContent = message;
+
+            // Apply styles
+            if (style.color) {
+                messageDiv.style.color = style.color;
+            }
+            if (style.highlight) {
+                messageDiv.style.backgroundColor = style.highlight;
+            }
+            if (style.bold) {
+                messageDiv.style.fontWeight = 'bold';
+            }
+            if (style.italic) {
+                messageDiv.style.fontStyle = 'italic';
+            }
+
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
@@ -274,6 +322,24 @@
                     type: 'update_name',
                     name: name
                 }));
+            }
+        });
+
+        updateFontButton.addEventListener('click', function () {
+            const fontUrl = fontInput.value.trim();
+            if (fontUrl) {
+                const fontName = `customFont-${Date.now()}`;
+                const style = document.createElement('style');
+                style.textContent = `
+                    @font-face {
+                        font-family: '${fontName}';
+                        src: url('${fontUrl}');
+                    }
+                    body {
+                        font-family: '${fontName}', sans-serif;
+                    }
+                `;
+                document.head.appendChild(style);
             }
         });
 
@@ -339,3 +405,4 @@
     </script>
 </body>
 </html>
+``` 
