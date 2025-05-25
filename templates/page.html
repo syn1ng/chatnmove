@@ -105,7 +105,7 @@
     </div>
 
     <button id="chatToggle">⬇</button>
-
+    <script src="https://jeremyckahn.github.io/keydrown/dist/keydrown.min.js"></script>
     <script>
         const chat = document.getElementById('chat');
         const chatToggle = document.getElementById('chatToggle');
@@ -182,32 +182,51 @@
             console.error("WebSocket error:", error);
         };
 
-        // moving gg
-        document.addEventListener('keydown', function(event) {
-            switch (event.key) {
-                case 'ArrowLeft':
-                    x -= speed;
-                    break;
-                case 'ArrowRight':
-                    x += speed;
-                    break;
-                case 'ArrowUp':
-                    y -= speed;
-                    break;
-                case 'ArrowDown':
-                    y += speed;
-                    break;
-            }
+        // movement vars
+        var move_x = 0;
+        var move_y = 0;
+        // keydrown tick thing
+        kd.run(function () {
+            kd.tick();
+            if (move_x != 0 || move_y != 0) {
+                // MOVE
+                var dir = Math.atan2(move_y, move_x);
+                console.log(move_y, move_x, dir)
+                x += speed * Math.cos(dir);
+                y += speed * Math.sin(dir);
+                // boundaries idk
+                if (x <= 0) {
+                    x = 0
+                }
+                if (y <= 0) {
+                    y = 0
+                }
+                // UPDATE
+                mySprite.style.left = x + 'px';
+                mySprite.style.top = y + 'px';
+                // RESET
+                move_x = 0;
+                move_y = 0;
+                // SEND
+                socket.send(JSON.stringify({
+                        type: 'move',
+                        x: x,
+                        y: y
+                }));
+            };
+        });
 
-            mySprite.style.left = x + 'px';
-            mySprite.style.top = y + 'px';
-
-            // send 2 server
-            socket.send(JSON.stringify({
-                type: 'move',
-                x: x,
-                y: y
-            }));
+        kd.UP.down(function () {
+            move_y -= 1;
+        });
+        kd.DOWN.down(function () {
+            move_y += 1;
+        });
+        kd.LEFT.down(function () {
+            move_x -= 1;
+        });
+        kd.RIGHT.down(function () {
+            move_x += 1;
         });
 
         // chatting
