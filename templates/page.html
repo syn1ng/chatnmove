@@ -3,7 +3,7 @@
 <html>
 <head>
     <title>awesome thing!</title>
-    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <link rel="icon" href="templates/favicon.ico" type="image/x-icon">
     <style>
         /* themes */
         body[data-theme="dark"] {
@@ -59,6 +59,10 @@
         }
         #messages div {
             margin: 5px 0;
+            color: white; /* text color for dark mode */
+        }
+        body[data-theme="light"] #messages div {
+            color: black; /* text color for light mode */
         }
         #themeToggle {
             position: fixed;
@@ -79,7 +83,7 @@
             position: absolute;
             width: 50px;
             height: 50px;
-            z-index: 1000; /* Ensure it appears above other elements */
+            z-index: 1000; /* makes sure it appears over everything else */
         }
     </style>
 </head>
@@ -97,14 +101,8 @@
         <input type="text" id="nameInput" placeholder="Enter your name">
         <button id="updateNameButton">Update Name</button>
         <br>
-        <label for="fontInput">Font URL:</label>
-        <input type="text" id="fontInput" placeholder="Enter font file URL">
-        <button id="updateFontButton">Update Font</button>
-        <br>
         <label for="colorInput">Text Color:</label>
         <input type="color" id="colorInput">
-        <label for="highlightInput">Highlight Color:</label>
-        <input type="color" id="highlightInput">
         <br>
         <label>
             <input type="checkbox" id="boldCheckbox"> Bold
@@ -126,7 +124,7 @@
         const chat = document.getElementById('chat');
         const chatToggle = document.getElementById('chatToggle');
 
-        // hide chat button 
+        // hide chat button
         chatToggle.addEventListener('click', () => {
             if (chat.classList.contains('hidden')) {
                 chat.classList.remove('hidden');
@@ -139,6 +137,10 @@
 
         const themeToggle = document.getElementById('themeToggle');
         const body = document.body;
+        const colorInput = document.getElementById('colorInput');
+
+        // set default color picker value to white
+        colorInput.value = '#ffffff';
 
         // light and dark mode
         themeToggle.addEventListener('click', () => {
@@ -146,13 +148,15 @@
             if (currentTheme === 'dark') {
                 body.setAttribute('data-theme', 'light');
                 themeToggle.textContent = 'Switch to Dark Mode';
+                colorInput.value = '#000000'; // update color picker to black for light mode
             } else {
                 body.setAttribute('data-theme', 'dark');
                 themeToggle.textContent = 'Switch to Light Mode';
+                colorInput.value = '#ffffff'; // update color picker to white for dark mode
             }
         });
 
-        // ws shit
+        // websocket setup
         const socket = new WebSocket('ws://' + window.location.host + '/ws');
         const mySprite = document.getElementById('mySprite');
         const messagesDiv = document.getElementById('messages');
@@ -162,10 +166,6 @@
         const updateSpriteButton = document.getElementById('updateSpriteButton');
         const nameInput = document.getElementById('nameInput');
         const updateNameButton = document.getElementById('updateNameButton');
-        const fontInput = document.getElementById('fontInput');
-        const updateFontButton = document.getElementById('updateFontButton');
-        const colorInput = document.getElementById('colorInput');
-        const highlightInput = document.getElementById('highlightInput');
         const boldCheckbox = document.getElementById('boldCheckbox');
         const italicCheckbox = document.getElementById('italicCheckbox');
         let x = 100;
@@ -173,7 +173,6 @@
         const speed = 5;
         const sprites = {}; // store all player sprites by their IDs
 
-        // more websocket shit
         socket.onopen = function() {
             console.log("Connected to the server.");
             createSprite('me', x, y, 'new player'); // default sprite is 'new player'
@@ -207,35 +206,24 @@
         // movement vars
         var move_x = 0;
         var move_y = 0;
-        // keydrown tick thing
         kd.run(function () {
             kd.tick();
             if (move_x != 0 || move_y != 0) {
-                // MOVE
                 var dir = Math.atan2(move_y, move_x);
-                console.log(move_y, move_x, dir)
                 x += speed * Math.cos(dir);
                 y += speed * Math.sin(dir);
-                // boundaries idk
-                if (x <= 0) {
-                    x = 0
-                }
-                if (y <= 0) {
-                    y = 0
-                }
-                // UPDATE
+                if (x <= 0) x = 0;
+                if (y <= 0) y = 0;
                 mySprite.style.left = x + 'px';
                 mySprite.style.top = y + 'px';
-                // RESET
                 move_x = 0;
                 move_y = 0;
-                // SEND
                 socket.send(JSON.stringify({
-                        type: 'move',
-                        x: x,
-                        y: y
+                    type: 'move',
+                    x: x,
+                    y: y
                 }));
-            };
+            }
         });
 
         kd.UP.down(function () {
@@ -263,7 +251,6 @@
             const message = chatInput.value.trim();
             if (message) {
                 const color = colorInput.value;
-                const highlight = highlightInput.value;
                 const bold = boldCheckbox.checked;
                 const italic = italicCheckbox.checked;
 
@@ -272,7 +259,6 @@
                     message: message,
                     style: {
                         color: color,
-                        highlight: highlight,
                         bold: bold,
                         italic: italic
                     }
@@ -285,12 +271,12 @@
             const messageDiv = document.createElement('div');
             messageDiv.textContent = message;
 
-            // Apply styles
+            // apply styles
             if (style.color) {
                 messageDiv.style.color = style.color;
-            }
-            if (style.highlight) {
-                messageDiv.style.backgroundColor = style.highlight;
+            } else {
+                const currentTheme = body.getAttribute('data-theme');
+                messageDiv.style.color = currentTheme === 'dark' ? 'white' : 'black';
             }
             if (style.bold) {
                 messageDiv.style.fontWeight = 'bold';
@@ -302,46 +288,6 @@
             messagesDiv.appendChild(messageDiv);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
-
-        // sprite updating
-        updateSpriteButton.addEventListener('click', function() {
-            const sprite = spriteInput.value.trim();
-            if (sprite) {
-                socket.send(JSON.stringify({
-                    type: 'update_sprite',
-                    sprite: sprite
-                }));
-                updateSpriteAppearance('me', sprite); // update sprite
-            }
-        });
-
-        updateNameButton.addEventListener('click', function() {
-            const name = nameInput.value.trim();
-            if (name) {
-                socket.send(JSON.stringify({
-                    type: 'update_name',
-                    name: name
-                }));
-            }
-        });
-
-        updateFontButton.addEventListener('click', function () {
-            const fontUrl = fontInput.value.trim();
-            if (fontUrl) {
-                const fontName = `customFont-${Date.now()}`;
-                const style = document.createElement('style');
-                style.textContent = `
-                    @font-face {
-                        font-family: '${fontName}';
-                        src: url('${fontUrl}');
-                    }
-                    body {
-                        font-family: '${fontName}', sans-serif;
-                    }
-                `;
-                document.head.appendChild(style);
-            }
-        });
 
         function createSprite(id, x, y, sprite) {
             if (id === 'me') {
@@ -374,24 +320,15 @@
                 element = mySprite; // make sure it's updated
             }
             if (element) {
-                if (sprite.endsWith('.mp4') || sprite.endsWith('.webm')) {
-                    // video
-                    element.innerHTML = `<video src="${sprite}" width="150" height="150" controls autoplay loop></video>`;
-                } else if (sprite.endsWith('.mp3') || sprite.endsWith('.wav') || sprite.endsWith('.ogg')) {
-                    // audio
-                    element.innerHTML = `<audio src="${sprite}" controls autoplay loop></audio>`;
-                } else if (sprite.startsWith('http')) {
-                    // image
+                if (sprite.startsWith('http')) {
                     element.innerHTML = `<img src="${sprite}" width="50" height="50">`;
                 } else {
-                    // word
                     element.textContent = sprite;
                 }
             }
         }
 
         function updateConnectedUsers(connectedUsers) {
-            // disconnect stuff? gotta see if it works
             for (const id in sprites) {
                 if (!connectedUsers.includes(parseInt(id))) {
                     const spriteElement = sprites[id];
@@ -405,4 +342,3 @@
     </script>
 </body>
 </html>
-``` 
