@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+    <title>awesome thing!</title>
+    <link rel="icon" href="favicon.ico" type="image/x-icon">
+    <style>
+        /* themes */
+        body[data-theme="dark"] {
+            background-color: #1a0038;
+            color: white;
+        }
+        body[data-theme="light"] {
+            background-color: #ffffff;
+            color: black;
+        }
+        .sprite {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            transition: all 0.1s ease;
+        }
+        #chat {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background-color: #300042;
+            padding: 10px;
+            box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        body[data-theme="light"] #chat {
+            background-color: #f1f1f1;
+            color: black;
+        }
+        #chat.hidden {
+            transform: translateY(100%); 
+        }
+        #chatToggle {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            cursor: pointer;
+            background-color: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            z-index: 1000;
+        }
+        body[data-theme="light"] #chatToggle {
+            background-color: #ddd;
+            color: black;
+        }
+        #messages {
+            max-height: 200px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        #messages div {
+            margin: 5px 0;
+        }
+        #themeToggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            cursor: pointer;
+            background-color: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        body[data-theme="light"] #themeToggle {
+            background-color: #ddd;
+            color: black;
+        }
+        #mySprite {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            z-index: 1000; /* Ensure it appears above other elements */
+        }
+    </style>
+</head>
+<body data-theme="dark">
+    <button id="themeToggle">Switch to Light Mode</button>
+
+    <div id="mySprite" class="sprite"></div>
+
+    <div id="controls">
+        <label for="spriteInput">Sprite (Image/Video/Audio URL or Letter):</label>
+        <input type="text" id="spriteInput" placeholder="Enter image, video, audio URL, or letter">
+        <button id="updateSpriteButton">Update Sprite</button>
+        <br>
+        <label for="nameInput">Chat Name:</label>
+        <input type="text" id="nameInput" placeholder="Enter your name">
+        <button id="updateNameButton">Update Name</button>
+    </div>
+
+    <div id="chat">
+        <div id="messages"></div>
+        <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off">
+        <button id="sendButton">Send</button>
+    </div>
+
+    <button id="chatToggle">⬇</button>
+
+    <script>
+        const chat = document.getElementById('chat');
+        const chatToggle = document.getElementById('chatToggle');
+
+        // hide chat button 
+        chatToggle.addEventListener('click', () => {
+            if (chat.classList.contains('hidden')) {
+                chat.classList.remove('hidden');
+                chatToggle.textContent = '⬇'; 
+            } else {
+                chat.classList.add('hidden');
+                chatToggle.textContent = '⬆'; 
+            }
+        });
+
+        const themeToggle = document.getElementById('themeToggle');
+        const body = document.body;
+
+        // light and dark mode
+        themeToggle.addEventListener('click', () => {
+            const currentTheme = body.getAttribute('data-theme');
+            if (currentTheme === 'dark') {
+                body.setAttribute('data-theme', 'light');
+                themeToggle.textContent = 'Switch to Dark Mode';
+            } else {
+                body.setAttribute('data-theme', 'dark');
+                themeToggle.textContent = 'Switch to Light Mode';
+            }
+        });
+
+        // ws shit
+        const socket = new WebSocket('ws://' + window.location.host + '/ws');
+        const mySprite = document.getElementById('mySprite');
+        const messagesDiv = document.getElementById('messages');
+        const chatInput = document.getElementById('chatInput');
+        const sendButton = document.getElementById('sendButton');
+        const spriteInput = document.getElementById('spriteInput');
+        const updateSpriteButton = document.getElementById('updateSpriteButton');
+        const nameInput = document.getElementById('nameInput');
+        const updateNameButton = document.getElementById('updateNameButton');
+        let x = 100;
+        let y = 100;
+        const speed = 5;
+        const sprites = {}; // store all player sprites by their IDs
+
+        // more websocket shit
+        socket.onopen = function() {
+            console.log("Connected to the server.");
+            createSprite('me', x, y, 'new player'); // default sprite is 'new player'
+        };
+
+        socket.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === 'new_player') {
+                createSprite(data.id, data.x, data.y, data.sprite);
+            } else if (data.type === 'move') {
+                updateSprite(data.id, data.x, data.y);
+            } else if (data.type === 'chat') {
+                displayMessage(`${data.name}: ${data.message}`);
+            } else if (data.type === 'update_sprite') {
+                updateSpriteAppearance(data.id, data.sprite);
+            } else if (data.type === 'update_name') {
+                displayMessage(`Player ${data.id} is now known as ${data.name}`);
+            } else if (data.type === 'connected_users') {
+                updateConnectedUsers(data.users);
+            }
+        };
+
+        socket.onclose = function() {
+            console.log("Disconnected from the server.");
+        };
+
+        socket.onerror = function(error) {
+            console.error("WebSocket error:", error);
+        };
+
+        // moving gg
+        document.addEventListener('keydown', function(event) {
+            switch (event.key) {
+                case 'ArrowLeft':
+                    x -= speed;
+                    break;
+                case 'ArrowRight':
+                    x += speed;
+                    break;
+                case 'ArrowUp':
+                    y -= speed;
+                    break;
+                case 'ArrowDown':
+                    y += speed;
+                    break;
+            }
+
+            mySprite.style.left = x + 'px';
+            mySprite.style.top = y + 'px';
+
+            // send 2 server
+            socket.send(JSON.stringify({
+                type: 'move',
+                x: x,
+                y: y
+            }));
+        });
+
+        // chatting
+        sendButton.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function sendMessage() {
+            const message = chatInput.value.trim();
+            if (message) {
+                socket.send(JSON.stringify({
+                    type: 'chat',
+                    message: message
+                }));
+                chatInput.value = '';
+            }
+        }
+
+        function displayMessage(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.textContent = message;
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        // sprite updating
+        updateSpriteButton.addEventListener('click', function() {
+            const sprite = spriteInput.value.trim();
+            if (sprite) {
+                socket.send(JSON.stringify({
+                    type: 'update_sprite',
+                    sprite: sprite
+                }));
+                updateSpriteAppearance('me', sprite); // update sprite
+            }
+        });
+
+        updateNameButton.addEventListener('click', function() {
+            const name = nameInput.value.trim();
+            if (name) {
+                socket.send(JSON.stringify({
+                    type: 'update_name',
+                    name: name
+                }));
+            }
+        });
+
+        function createSprite(id, x, y, sprite) {
+            if (id === 'me') {
+                mySprite.style.left = x + 'px';
+                mySprite.style.top = y + 'px';
+                updateSpriteAppearance(id, sprite, mySprite);
+            } else if (!sprites[id]) {
+                const newSprite = document.createElement('div');
+                newSprite.className = 'sprite';
+                updateSpriteAppearance(id, sprite, newSprite);
+                newSprite.style.left = x + 'px';
+                newSprite.style.top = y + 'px';
+                document.body.appendChild(newSprite);
+                sprites[id] = newSprite;
+            }
+        }
+
+        function updateSprite(id, x, y) {
+            if (id === 'me') {
+                mySprite.style.left = x + 'px';
+                mySprite.style.top = y + 'px';
+            } else if (sprites[id]) {
+                sprites[id].style.left = x + 'px';
+                sprites[id].style.top = y + 'px';
+            }
+        }
+
+        function updateSpriteAppearance(id, sprite, element = sprites[id]) {
+            if (id === 'me') {
+                element = mySprite; // make sure it's updated
+            }
+            if (element) {
+                if (sprite.endsWith('.mp4') || sprite.endsWith('.webm')) {
+                    // video
+                    element.innerHTML = `<video src="${sprite}" width="150" height="150" controls autoplay loop></video>`;
+                } else if (sprite.endsWith('.mp3') || sprite.endsWith('.wav') || sprite.endsWith('.ogg')) {
+                    // audio
+                    element.innerHTML = `<audio src="${sprite}" controls autoplay loop></audio>`;
+                } else if (sprite.startsWith('http')) {
+                    // image
+                    element.innerHTML = `<img src="${sprite}" width="50" height="50">`;
+                } else {
+                    // word
+                    element.textContent = sprite;
+                }
+            }
+        }
+
+        function updateConnectedUsers(connectedUsers) {
+            // disconnect stuff? gotta see if it works
+            for (const id in sprites) {
+                if (!connectedUsers.includes(parseInt(id))) {
+                    const spriteElement = sprites[id];
+                    if (spriteElement) {
+                        spriteElement.remove(); // remove the sprite element from the DOM
+                    }
+                    delete sprites[id]; // remove from list
+                }
+            }
+        }
+    </script>
+</body>
+</html>
