@@ -129,8 +129,6 @@ def websocket(ws):
                             }))
                         except:
                             pass
-                # log using friendly name
-                app.logger.info(f"{names.get(client_id, client_id)} moved to ({data['x']}, {data['y']})")
             elif data['type'] == 'chat':
                 # send message in chat with styles
                 for other_id, other_ws in clients.items():
@@ -205,4 +203,4 @@ def users():
     return jsonify(list(names.values()))
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=53724, debug=True)
+    app.run(host='0.0.0.0', port=11291, debug=True)
