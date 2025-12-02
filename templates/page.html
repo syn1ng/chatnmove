@@ -83,7 +83,7 @@
             position: absolute;
             width: 50px;
             height: 50px;
-            z-index: 1000; /* makes sure it appears over everything else */
+            z-index: 1000;
         }
     </style>
 </head>
@@ -168,6 +168,33 @@
         const updateNameButton = document.getElementById('updateNameButton');
         const boldCheckbox = document.getElementById('boldCheckbox');
         const italicCheckbox = document.getElementById('italicCheckbox');
+
+        updateSpriteButton.addEventListener('click', () => {
+            const sprite = spriteInput.value.trim();
+            if (sprite) {
+                // send update to server and update local appearance
+                socket.send(JSON.stringify({
+                    type: 'update_sprite',
+                    sprite: sprite
+                }));
+                updateSpriteAppearance('me', sprite, mySprite);
+                spriteInput.value = '';
+            }
+        });
+
+        updateNameButton.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (name) {
+                socket.send(JSON.stringify({
+                    type: 'update_name',
+                    name: name
+                }));
+                // show feedback locally
+                displayMessage(`You are now known as ${name}`);
+                nameInput.value = '';
+            }
+        });
+
         let x = 100;
         let y = 100;
         const speed = 5;
