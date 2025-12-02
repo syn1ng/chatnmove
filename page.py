@@ -4,6 +4,7 @@ import json
 import threading
 import time
 import logging
+from werkzeug.serving import WSGIRequestHandler
 
 app = Flask(__name__)
 sock = Sock(app)
@@ -11,6 +12,23 @@ sock = Sock(app)
 # reduce default access logging (don't show raw IPs)
 logging.getLogger('werkzeug').setLevel(logging.WARNING)
 app.logger.setLevel(logging.INFO)
+# ensure app logger prints to console
+handler = logging.StreamHandler()
+handler.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+handler.setFormatter(formatter)
+if not app.logger.handlers:
+    app.logger.addHandler(handler)
+
+
+class QuietHandler(WSGIRequestHandler):
+    # suppress low-level HTTP error messages (e.g., "Bad request version")
+    def log_error(self, format, *args):
+        # optionally forward to app logger at debug level
+        try:
+            app.logger.debug(format % args)
+        except Exception:
+            pass
 
 # store connected clients and their data
 clients = {}
@@ -31,40 +49,42 @@ def assign_display_name():
 def cleanup_disconnected_clients():
     while True:
         time.sleep(10)  # clean up every 10 seconds
-        disconnected_clients = []
-        for client_id, ws in clients.items():
+        # iterate over a snapshot to allow removing while iterating
+        for client_id, ws in list(clients.items()):
             try:
-                # ping
+                # ping; if this raises, client is likely disconnected/malformed
                 ws.send(json.dumps({"type": "ping"}))
-            except:
-                # disconnect if error
-                disconnected_clients.append(client_id)
-
-        # get rid of disconnected client
-        for client_id in disconnected_clients:
-            if client_id in clients:
-                del clients[client_id]
-            if client_id in positions:
-                del positions[client_id]
-            if client_id in sprites:
-                del sprites[client_id]
-            if client_id in names:
-                del names[client_id]
-            # print chat name when available
-            print(f"Removed disconnected client: {names.get(client_id, client_id)}")
-            # notify remaining clients of updated user list (names only)
-            for other_id, other_ws in clients.items():
+            except Exception:
+                # remove immediately (best-effort) and avoid exposing network info
                 try:
-                    other_ws.send(json.dumps({
-                        'type': 'user_names',
-                        'users': list(names.values())
-                    }))
-                except:
-                    pass
+                    if client_id in clients:
+                        del clients[client_id]
+                    if client_id in positions:
+                        del positions[client_id]
+                    if client_id in sprites:
+                        del sprites[client_id]
+                    if client_id in names:
+                        removed_name = names.pop(client_id, None)
+                    else:
+                        removed_name = None
+                except Exception:
+                    removed_name = None
+
+                # friendly log only (no IPs)
+                app.logger.info(f"Removed disconnected client: {removed_name or client_id}")
+
+                # notify remaining clients of updated user list (names only)
+                for other_id, other_ws in list(clients.items()):
+                    try:
+                        other_ws.send(json.dumps({
+                            'type': 'user_names',
+                            'users': list(names.values())
+                        }))
+                    except:
+                        pass
 
 # start cleanup thread
 cleanup_thread = threading.Thread(target=cleanup_disconnected_clients, daemon=True)
-cleanup_thread.start()
 
 @app.route('/')
 def home():
@@ -113,7 +133,34 @@ def websocket(ws):
 
     try:
         while True:
-            data = json.loads(ws.receive())
+            raw = ws.receive()
+            # if receive returns None the socket is closed
+            if raw is None:
+                break
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                app.logger.warning(f"Bad JSON from {names.get(client_id, client_id)}: {raw!r}")
+                # reply with structured error if possible
+                try:
+                    ws.send(json.dumps({
+                        'type': 'error',
+                        'message': 'invalid_json',
+                        'raw': str(raw)[:200]
+                    }))
+                except:
+                    pass
+                continue
+            except Exception as e:
+                app.logger.exception(f"Error parsing payload from {names.get(client_id, client_id)}")
+                try:
+                    ws.send(json.dumps({
+                        'type': 'error',
+                        'message': 'parse_error'
+                    }))
+                except:
+                    pass
+                continue
             if data['type'] == 'move':
                 # updates positions in local client
                 positions[client_id] = {'x': data['x'], 'y': data['y']}
@@ -202,5 +249,19 @@ def users():
     # return only display names — do NOT expose IP addresses or raw connection ids
     return jsonify(list(names.values()))
 
+
+@app.route('/players')
+def players_page():
+    # render a simple page that lists connected players (fetches /users)
+    return render_template('players.html')
+
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=11291, debug=True)
+    # start background maintenance thread from the running process
+    try:
+        cleanup_thread.start()
+    except RuntimeError:
+        # thread already started
+        pass
+    # run without the reloader so background threads stay in the same process
+    # use a custom request handler to suppress low-level "Bad request version" logs
+    app.run(host='0.0.0.0', port=11291, debug=True, use_reloader=False, request_handler=QuietHandler)

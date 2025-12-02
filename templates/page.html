@@ -199,6 +199,7 @@
         let y = 100;
         const speed = 5;
         const sprites = {}; // store all player sprites by their IDs
+        const spriteNames = {}; // map websocket id -> display name
 
         socket.onopen = function() {
             console.log("Connected to the server.");
@@ -208,7 +209,9 @@
         socket.onmessage = function(event) {
             const data = JSON.parse(event.data);
             if (data.type === 'new_player') {
-                createSprite(data.id, data.x, data.y, data.sprite);
+                // remember display name for this id then create sprite
+                spriteNames[data.id] = data.name;
+                createSprite(data.id, data.x, data.y, data.sprite, data.name);
             } else if (data.type === 'move') {
                 updateSprite(data.id, data.x, data.y);
             } else if (data.type === 'chat') {
@@ -216,7 +219,16 @@
             } else if (data.type === 'update_sprite') {
                 updateSpriteAppearance(data.id, data.sprite);
             } else if (data.type === 'update_name') {
+                // update local mapping and showmessage
+                spriteNames[data.id] = data.name;
+                // update DOM element's stored name if present
+                if (sprites[data.id]) sprites[data.id].dataset.name = data.name;
                 displayMessage(`Player ${data.id} is now known as ${data.name}`);
+                // reconcile in case names list changed
+                reconcileWithListFromServer();
+            } else if (data.type === 'user_names') {
+                // server broadcast of current display names
+                reconcileWithList(data.users);
             } else if (data.type === 'connected_users') {
                 updateConnectedUsers(data.users);
             }
@@ -316,7 +328,7 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
-        function createSprite(id, x, y, sprite) {
+        function createSprite(id, x, y, sprite, name) {
             if (id === 'me') {
                 mySprite.style.left = x + 'px';
                 mySprite.style.top = y + 'px';
@@ -324,6 +336,7 @@
             } else if (!sprites[id]) {
                 const newSprite = document.createElement('div');
                 newSprite.className = 'sprite';
+                if (name) newSprite.dataset.name = name;
                 updateSpriteAppearance(id, sprite, newSprite);
                 newSprite.style.left = x + 'px';
                 newSprite.style.top = y + 'px';
@@ -357,15 +370,49 @@
 
         function updateConnectedUsers(connectedUsers) {
             for (const id in sprites) {
-                if (!connectedUsers.includes(parseInt(id))) {
+                // connectedUsers may be an array of ids (numbers) or names (strings).
+                // We primarily compare by display name when available.
+                const name = spriteNames[id];
+                const idNum = parseInt(id);
+                let present = false;
+                if (connectedUsers.includes(idNum)) present = true;
+                if (!present && name && connectedUsers.includes(name)) present = true;
+                if (!present) {
                     const spriteElement = sprites[id];
                     if (spriteElement) {
                         spriteElement.remove(); // remove the sprite element from the DOM
                     }
                     delete sprites[id]; // remove from list
+                    delete spriteNames[id];
                 }
             }
         }
+
+        function reconcileWithList(serverNames) {
+            for (const id in sprites) {
+                const name = spriteNames[id];
+                if (!name) continue; // unknown name, skip
+                if (!serverNames.includes(name)) {
+                    const el = sprites[id];
+                    if (el) el.remove();
+                    delete sprites[id];
+                    delete spriteNames[id];
+                }
+            }
+        }
+
+        async function reconcileWithListFromServer() {
+            try {
+                const res = await fetch('/users');
+                if (!res.ok) return;
+                const users = await res.json();
+                reconcileWithList(users);
+            } catch (e) {
+                console.error('Failed to fetch users for reconciliation', e);
+            }
+        }
+
+        setInterval(reconcileWithListFromServer, 3000);
     </script>
 </body>
 </html>

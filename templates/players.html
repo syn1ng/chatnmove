@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Connected Players</title>
+    <style>
+        body { font-family: Arial, sans-serif; background:#111; color:#eee; padding:20px }
+        h1 { font-size:24px }
+        #players { margin-top:12px }
+        li { padding:6px 8px; background:#1f1f1f; margin:6px 0; border-radius:4px }
+        .count { color:#9bd; }
+        .small { font-size:12px; color:#999 }
+    </style>
+</head>
+<body>
+    <h1>Connected Players <span class="small">(auto-refreshes)</span></h1>
+    <div class="small">Count: <span id="count">0</span></div>
+    <ul id="players"></ul>
+
+    <script>
+        async function refresh() {
+            try {
+                const res = await fetch('/users');
+                if (!res.ok) throw new Error('network');
+                const users = await res.json();
+                const list = document.getElementById('players');
+                const count = document.getElementById('count');
+                list.innerHTML = '';
+                users.forEach(u => {
+                    const li = document.createElement('li');
+                    li.textContent = u;
+                    list.appendChild(li);
+                });
+                count.textContent = users.length;
+            } catch (e) {
+                console.error('Failed to load users', e);
+            }
+        }
+
+        refresh();
+        setInterval(refresh, 2000);
+    </script>
+</body>
+</html>
